@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Agnes AI 微信机器人 - 管理后台</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/element-plus/dist/index.css">
+  <script src="https://cdn.jsdelivr.net/npm/vue@3/dist/vue.global.prod.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/element-plus"></script>
+  <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f7fa; }
+    .app-container { display: flex; min-height: 100vh; }
+    .sidebar { width: 220px; background: #304156; color: #fff; padding: 20px 0; flex-shrink: 0; }
+    .sidebar h2 { padding: 0 20px 20px; font-size: 18px; border-bottom: 1px solid #3d4d60; margin-bottom: 10px; }
+    .sidebar-menu { list-style: none; }
+    .sidebar-menu li { padding: 12px 20px; cursor: pointer; transition: background 0.3s; }
+    .sidebar-menu li:hover, .sidebar-menu li.active { background: #263445; }
+    .main-content { flex: 1; padding: 24px; overflow-y: auto; }
+    .card { background: #fff; border-radius: 8px; padding: 20px; margin-bottom: 20px; box-shadow: 0 2px 12px rgba(0,0,0,0.05); }
+    .card h3 { margin-bottom: 16px; font-size: 16px; color: #303133; }
+    .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; }
+    .stat-card { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #fff; padding: 20px; border-radius: 8px; text-align: center; }
+    .stat-card.green { background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); }
+    .stat-card.orange { background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); }
+    .stat-card.blue { background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); }
+    .stat-card .number { font-size: 32px; font-weight: bold; }
+    .stat-card .label { font-size: 14px; opacity: 0.9; margin-top: 4px; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { padding: 12px; text-align: left; border-bottom: 1px solid #ebeef5; }
+    th { background: #fafafa; font-weight: 600; color: #606266; }
+    .tag { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 12px; margin-right: 4px; }
+    .tag-success { background: #f0f9ff; color: #67c23a; }
+    .tag-warning { background: #fdf6ec; color: #e6a23c; }
+    .tag-danger { background: #fef0f0; color: #f56c6c; }
+    .login-overlay { position: fixed; inset: 0; background: #f5f7fa; display: flex; align-items: center; justify-content: center; z-index: 1000; }
+    .login-box { background: #fff; padding: 40px; border-radius: 12px; box-shadow: 0 4px 24px rgba(0,0,0,0.1); width: 360px; }
+    .login-box h2 { text-align: center; margin-bottom: 24px; color: #303133; }
+    .btn-primary { background: #409eff; color: #fff; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; }
+    .btn-primary:hover { background: #66b1ff; }
+    .btn-danger { background: #f56c6c; color: #fff; border: none; padding: 4px 12px; border-radius: 4px; cursor: pointer; }
+    .btn-success { background: #67c23a; color: #fff; border: none; padding: 4px 12px; border-radius: 4px; cursor: pointer; }
+    .flex-between { display: flex; justify-content: space-between; align-items: center; }
+    input, select { padding: 8px 12px; border: 1px solid #dcdfe6; border-radius: 4px; font-size: 14px; }
+    .log-area { background: #1e1e1e; color: #d4d4d4; padding: 16px; border-radius: 8px; font-family: 'Courier New', monospace; font-size: 13px; max-height: 400px; overflow-y: auto; white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <!-- Login Overlay -->
+    <div class="login-overlay" v-if="!isLoggedIn">
+      <div class="login-box">
+        <h2>Agnes AI 管理后台</h2>
+        <el-form @submit.prevent="login">
+          <el-form-item label="用户名">
+            <el-input v-model="loginForm.username" placeholder="请输入用户名"></el-input>
+          </el-form-item>
+          <el-form-item label="密码">
+            <el-input v-model="loginForm.password" type="password" placeholder="请输入密码"></el-input>
+          </el-form-item>
+          <el-button type="primary" @click="login" style="width: 100%;">登录</el-button>
+        </el-form>
+      </div>
+    </div>
+
+    <!-- Main App -->
+    <div class="app-container" v-else>
+      <div class="sidebar">
+        <h2>Agnes AI Bot</h2>
+        <ul class="sidebar-menu">
+          <li :class="{ active: currentPage === 'dashboard' }" @click="currentPage = 'dashboard'">仪表盘</li>
+          <li :class="{ active: currentPage === 'chats' }" @click="currentPage = 'chats'">聊天记录</li>
+          <li :class="{ active: currentPage === 'users' }" @click="currentPage = 'users'">用户管理</li>
+          <li :class="{ active: currentPage === 'whitelist' }" @click="currentPage = 'whitelist'">白名单</li>
+          <li :class="{ active: currentPage === 'videos' }" @click="currentPage = 'videos'">视频任务</li>
+          <li :class="{ active: currentPage === 'system' }" @click="currentPage = 'system'">系统信息</li>
+          <li @click="logout">退出登录</li>
+        </ul>
+      </div>
+
+      <div class="main-content">
+        <!-- Dashboard -->
+        <div v-if="currentPage === 'dashboard'">
+          <div class="stats-grid">
+            <div class="stat-card">
+              <div class="number">{{ stats.totalUsers || 0 }}</div>
+              <div class="label">总用户数</div>
+            </div>
+            <div class="stat-card green">
+              <div class="number">{{ stats.totalChats || 0 }}</div>
+              <div class="label">总聊天数</div>
+            </div>
+            <div class="stat-card orange">
+              <div class="number">{{ stats.todayChats || 0 }}</div>
+              <div class="label">今日聊天</div>
+            </div>
+            <div class="stat-card blue">
+              <div class="number">{{ stats.pendingTasks || 0 }}</div>
+              <div class="label">待处理视频</div>
+            </div>
+          </div>
+
+          <div class="card" style="margin-top: 20px;">
+            <h3>系统概览</h3>
+            <table>
+              <tr><td>Bot 状态</td><td><span class="tag tag-success">运行中</span></td></tr>
+              <tr><td>运行时间</td><td>{{ systemInfo.uptime || '--' }}</td></tr>
+              <tr><td>内存使用</td><td>{{ systemInfo.memory?.heapUsed || '--' }}</td></tr>
+              <tr><td>Node 版本</td><td>{{ systemInfo.nodeVersion || '--' }}</td></tr>
+              <tr><td>平台</td><td>{{ systemInfo.platform || '--' }}</td></tr>
+            </table>
+          </div>
+        </div>
+
+        <!-- Chat History -->
+        <div v-if="currentPage === 'chats'">
+          <div class="card">
+            <div class="flex-between">
+              <h3>聊天记录</h3>
+              <div>
+                <input v-model="chatFilterWxid" placeholder="用户WXID" style="width: 200px; margin-right: 8px;" />
+                <button class="btn-primary" @click="loadChats">查询</button>
+              </div>
+            </div>
+            <table style="margin-top: 16px;">
+              <thead>
+                <tr><th>发送者</th><th>接收者</th><th>内容</th><th>类型</th><th>时间</th></tr>
+              </thead>
+              <tbody>
+                <tr v-for="chat in chats" :key="chat.id">
+                  <td>{{ chat.sender_wxid }}</td>
+                  <td>{{ chat.receiver_wxid }}</td>
+                  <td>{{ chat.content }}</td>
+                  <td><span class="tag tag-success">{{ chat.msg_type }}</span></td>
+                  <td>{{ formatTime(chat.timestamp) }}</td>
+                </tr>
+              </tbody>
+            </table>
+            <p v-if="chats.length === 0" style="color: #999; text-align: center; padding: 40px;">暂无聊天记录</p>
+          </div>
+        </div>
+
+        <!-- Users -->
+        <div v-if="currentPage === 'users'">
+          <div class="card">
+            <h3>用户列表</h3>
+            <table>
+              <thead>
+                <tr><th>WXID</th><th>昵称</th><th>群ID</th><th>当前模型</th><th>注册时间</th></tr>
+              </thead>
+              <tbody>
+                <tr v-for="user in users" :key="user.wxid">
+                  <td>{{ user.wxid }}</td>
+                  <td>{{ user.name }}</td>
+                  <td>{{ user.room_id || '-' }}</td>
+                  <td><span class="tag tag-success">{{ user.current_model }}</span></td>
+                  <td>{{ user.created_at }}</td>
+                </tr>
+              </tbody>
+            </table>
+            <p v-if="users.length === 0" style="color: #999; text-align: center; padding: 40px;">暂无用户数据</p>
+          </div>
+        </div>
+
+        <!-- Whitelist -->
+        <div v-if="currentPage === 'whitelist'">
+          <div class="card">
+            <div class="flex-between">
+              <h3>白名单管理</h3>
+              <div>
+                <input v-model="newWxid" placeholder="新WXID" style="width: 150px; margin-right: 8px;" />
+                <input v-model="newName" placeholder="昵称" style="width: 120px; margin-right: 8px;" />
+                <button class="btn-success" @click="addToWhitelist">添加</button>
+              </div>
+            </div>
+            <table style="margin-top: 16px;">
+              <thead>
+                <tr><th>WXID</th><th>昵称</th><th>添加人</th><th>添加时间</th><th>操作</th></tr>
+              </thead>
+              <tbody>
+                <tr v-for="item in whitelist" :key="item.wxid">
+                  <td>{{ item.wxid }}</td>
+                  <td>{{ item.name }}</td>
+                  <td>{{ item.added_by }}</td>
+                  <td>{{ item.added_at }}</td>
+                  <td><button class="btn-danger" @click="removeFromWhitelist(item.wxid)">移除</button></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Video Tasks -->
+        <div v-if="currentPage === 'videos'">
+          <div class="card">
+            <div class="flex-between">
+              <h3>视频生成任务</h3>
+              <input v-model="videoWxid" placeholder="用户WXID" style="width: 200px; margin-right: 8px;" />
+              <button class="btn-primary" @click="loadVideos">查询</button>
+            </div>
+            <table style="margin-top: 16px;">
+              <thead>
+                <tr><th>任务ID</th><th>用户</th><th>提示词</th><th>状态</th><th>结果URL</th><th>创建时间</th></tr>
+              </thead>
+              <tbody>
+                <tr v-for="task in videoTasks" :key="task.id">
+                  <td>{{ task.id.substring(0, 8) }}...</td>
+                  <td>{{ task.wxid }}</td>
+                  <td>{{ task.prompt }}</td>
+                  <td>
+                    <span class="tag" :class="task.status === 'completed' ? 'tag-success' : task.status === 'pending' ? 'tag-warning' : 'tag-danger'">
+                      {{ task.status }}
+                    </span>
+                  </td>
+                  <td>{{ task.result_url || '-' }}</td>
+                  <td>{{ task.created_at }}</td>
+                </tr>
+              </tbody>
+            </table>
+            <p v-if="videoTasks.length === 0" style="color: #999; text-align: center; padding: 40px;">暂无视频任务</p>
+          </div>
+        </div>
+
+        <!-- System -->
+        <div v-if="currentPage === 'system'">
+          <div class="card">
+            <h3>系统信息</h3>
+            <table>
+              <tr><td>运行时间</td><td>{{ systemInfo.uptime || '--' }}</td></tr>
+              <tr><td>内存 RSS</td><td>{{ systemInfo.memory?.rss || '--' }}</td></tr>
+              <tr><td>内存 Heap Used</td><td>{{ systemInfo.memory?.heapUsed || '--' }}</td></tr>
+              <tr><td>内存 Heap Total</td><td>{{ systemInfo.memory?.heapTotal || '--' }}</td></tr>
+              <tr><td>Node 版本</td><td>{{ systemInfo.nodeVersion || '--' }}</td></tr>
+              <tr><td>平台</td><td>{{ systemInfo.platform || '--' }}</td></tr>
+              <tr><td>进程 PID</td><td>{{ systemInfo.pid || '--' }}</td></tr>
+            </table>
+          </div>
+          <div class="card">
+            <h3>操作日志</h3>
+            <div class="log-area" ref="logArea">
+              {{ logs.join('\n') }}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const { createApp, ref, onMounted, nextTick } = Vue;
+    const { ElMessage } = ElementPlus;
+
+    const app = createApp({
+      setup() {
+        const isLoggedIn = ref(false);
+        const token = ref(localStorage.getItem('auth_token') || '');
+        const currentPage = ref('dashboard');
+
+        // Login
+        const loginForm = ref({ username: '', password: '' });
+        const login = async () => {
+          try {
+            const res = await axios.post('/api/auth/login', loginForm.value);
+            token.value = res.data.token;
+            localStorage.setItem('auth_token', token.value);
+            isLoggedIn.value = true;
+            ElMessage.success('登录成功');
+            loadData();
+          } catch (e) {
+            ElMessage.error('登录失败: ' + (e.response?.data?.error || e.message));
+          }
+        };
+
+        const logout = () => {
+          token.value = '';
+          localStorage.removeItem('auth_token');
+          isLoggedIn.value = false;
+          currentPage.value = 'dashboard';
+        };
+
+        // Data
+        const stats = ref({});
+        const systemInfo = ref({});
+        const chats = ref([]);
+        const users = ref([]);
+        const whitelist = ref([]);
+        const videoTasks = ref([]);
+        const chatFilterWxid = ref('');
+        const videoWxid = ref('');
+        const newWxid = ref('');
+        const newName = ref('');
+        const logs = ref([]);
+
+        const api = () => axios.create({
+          baseURL: '/',
+          headers: { Authorization: 'Bearer ' + token.value }
+        });
+
+        const loadData = async () => {
+          try {
+            const ax = api();
+            const [statsRes, sysRes] = await Promise.all([ax.get('/api/stats'), ax.get('/api/system')]);
+            stats.value = statsRes.data;
+            systemInfo.value = sysRes.data;
+
+            const usersRes = await ax.get('/api/users');
+            users.value = usersRes.data;
+
+            const wlRes = await ax.get('/api/whitelist');
+            whitelist.value = wlRes.data;
+          } catch (e) {
+            if (e.response?.status === 401) logout();
+          }
+        };
+
+        const loadChats = async () => {
+          try {
+            const ax = api();
+            const params = {};
+            if (chatFilterWxid.value) params.wxid = chatFilterWxid.value;
+            const res = await ax.get('/api/chats', { params });
+            chats.value = res.data;
+          } catch (e) {}
+        };
+
+        const loadVideos = async () => {
+          try {
+            const ax = api();
+            const res = await ax.get('/api/videos', { params: { wxid: videoWxid.value } });
+            videoTasks.value = res.data;
+          } catch (e) {}
+        };
+
+        const addToWhitelist = async () => {
+          try {
+            await axios.post('/api/whitelist', { wxid: newWxid.value, name: newName.value, addedBy: 'admin' }, {
+              headers: { Authorization: 'Bearer ' + token.value }
+            });
+            ElMessage.success('已添加');
+            newWxid.value = '';
+            newName.value = '';
+            loadData();
+          } catch (e) {
+            ElMessage.error('添加失败');
+          }
+        };
+
+        const removeFromWhitelist = async (wxid) => {
+          try {
+            await axios.delete('/api/whitelist/' + wxid, {
+              headers: { Authorization: 'Bearer ' + token.value }
+            });
+            ElMessage.success('已移除');
+            loadData();
+          } catch (e) {
+            ElMessage.error('移除失败');
+          }
+        };
+
+        const formatTime = (ts) => {
+          if (!ts) return '--';
+          return new Date(ts * 1000).toLocaleString('zh-CN');
+        };
+
+        onMounted(() => {
+          if (token.value) {
+            isLoggedIn.value = true;
+            loadData();
+          }
+        });
+
+        return {
+          isLoggedIn, token, currentPage, loginForm, login, logout,
+          stats, systemInfo, chats, users, whitelist, videoTasks,
+          chatFilterWxid, videoWxid, newWxid, newName, logs,
+          loadData, loadChats, loadVideos, addToWhitelist, removeFromWhitelist, formatTime
+        };
+      }
+    });
+
+    app.use(ElementPlus);
+    app.mount('#app');
+  </script>
+</body>
+</html>

@@ -1,0 +1,32 @@
+version: '3.8'
+
+services:
+  wechat-bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: wechat-ai-bot
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+      - "3001:3001"
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - ./temp:/app/temp
+      - ./.env:/app/.env:ro
+    environment:
+      - NODE_ENV=production
+      - TZ=Asia/Shanghai
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/health', (r) => { process.exit(r.statusCode === 200 ? 0 : 1) })"]
+      interval: 30s
+      timeout: 10s
+      start_period: 60s
+      retries: 3
+    networks:
+      - bot-network
+
+networks:
+  bot-network:
+    driver: bridge
